@@ -1,4 +1,6 @@
 using Tele.Bot.Client;
+using Microsoft.AspNetCore.Components.Forms;
+using Tele.Bot.Models;
 using Telegram.Bot;
 using Telegram.Bot.Exceptions;
 using Telegram.Bot.Polling;
@@ -11,16 +13,24 @@ public class TelegramService : ITelegramService
 {
     // DI сервисы
     // private readonly ВАШ СЕРВИС
+    private readonly IRentService _rentService;
+    private readonly IRentalDbService _rentalDbService;
+
+    private readonly string? RentBotKey = Environment.GetEnvironmentVariable("TelegramRentBotClient");
+
+    
 
     // не забываем добавить их в конструктор
-    public TelegramService( )
+    public TelegramService(IRentService rentService, IRentalDbService rentalDbService)
     {
-
+        _rentService = rentService;
+        _rentalDbService = rentalDbService;
     }
-    
+
     public Task StartBot(CancellationTokenSource cts)
     {
-        var botClient = new TelegramBotClient("TOKEN");
+        var botClient = new TelegramBotClient(RentBotKey);
+       // var botClient = new TelegramBotClient("7136149933:AAH0Oi4qWEtr5YzBVjnA8MsGCIPT2Y9iiVQ");
 
  
 
@@ -55,23 +65,38 @@ public class TelegramService : ITelegramService
 
 
         // Работа
-        
-        
-        if (messageText == "/start")
+
+        if (messageText.StartsWith("/start"))
         {
-            await botClient.SendTextMessageAsync(
-                chatId: message.Chat.Id,
-                text: "Используй команды /say /test",
-                cancellationToken: cancellationToken);
+            var result = await _rentService.GetRentals();
+
+            var responseArray = result.Results.Take(5);
+
+            foreach (var appartment in responseArray)
+            {
+                var dbEntity = new Rent()
+                {
+                    Image = appartment.Image.ThumbnailMedium,
+                    ResponseId = appartment.Id,
+                    MaxPrice = appartment.MaxPrice,
+                    Name = appartment.Name,
+                    Address = appartment.Address,
+                    Internal4rentId = appartment.Internal4rentId,
+                    MinPrice = appartment.MinPrice,
+                    PropertyType = appartment.PropertyType
+                };
+
+                await _rentalDbService.SaveToDb(dbEntity);
+
+                //
+                await botClient.SendPhotoAsync(
+                    chatId: message.Chat.Id,
+                    appartment.Image.ThumbnailMedium,
+                    caption: $"Appartment name: {appartment.Name}  \n Address: {appartment.Address} \n  Price: {appartment.MaxPrice}",
+                    cancellationToken: cancellationToken);
+            }
         
-            return;
         }
-    
-        //
-        await botClient.SendTextMessageAsync(
-            chatId: message.Chat.Id,
-            text: "пРИВЕТ",
-            cancellationToken: cancellationToken);
     }
 
 
